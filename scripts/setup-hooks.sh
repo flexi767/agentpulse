@@ -103,42 +103,11 @@ if [[ "$AGENT_TYPE" == "claude_code" ]]; then
 
 elif [[ "$AGENT_TYPE" == "codex_cli" ]]; then
   HOOKS_FILE="$HOME/.codex/hooks.json"
-  EVENTS=("SessionStart" "PreToolUse" "PostToolUse" "UserPromptSubmit" "Stop" "SubagentStart" "SubagentStop" "PermissionRequest" "PreCompact" "PostCompact")
-
   echo "Configuring Codex CLI hooks..."
-
-  HOOKS_ARRAY="["
-  for i in "${!EVENTS[@]}"; do
-    EVENT="${EVENTS[$i]}"
-    if [[ $i -gt 0 ]]; then
-      HOOKS_ARRAY+=","
-    fi
-    HOOKS_ARRAY+="{\"event\":\"${EVENT}\",\"type\":\"http\",\"url\":\"${AGENTPULSE_URL}/api/v1/hooks\",\"async\":true,\"headers\":{\"Authorization\":\"Bearer ${AGENTPULSE_KEY}\",\"X-Agent-Type\":\"codex_cli\"}}"
-  done
-  HOOKS_ARRAY+="]"
-
   mkdir -p "$HOME/.codex"
-  echo "{\"hooks\":$HOOKS_ARRAY}" | python3 -m json.tool > "$HOOKS_FILE" 2>/dev/null || echo "{\"hooks\":$HOOKS_ARRAY}" > "$HOOKS_FILE"
-
-  # Hooks are stable and enabled by default since codex-cli 0.124.0;
-  # `codex_hooks` is a recognized legacy alias for the `hooks` feature
-  # (confirmed harmless via `codex doctor` on 0.144.5). Written anyway for
-  # compatibility with older codex-cli installs that still gate on it.
-  CONFIG_TOML="$HOME/.codex/config.toml"
-  if [[ -f "$CONFIG_TOML" ]]; then
-    if ! grep -q "codex_hooks" "$CONFIG_TOML"; then
-      echo "" >> "$CONFIG_TOML"
-      echo "[features]" >> "$CONFIG_TOML"
-      echo "codex_hooks = true" >> "$CONFIG_TOML"
-    fi
-  else
-    mkdir -p "$HOME/.codex"
-    echo '[features]' > "$CONFIG_TOML"
-    echo 'codex_hooks = true' >> "$CONFIG_TOML"
-  fi
+  curl -fsSL "$AGENTPULSE_URL/install-codex-hooks.py" | AGENTPULSE_SETUP_KEY="$AGENTPULSE_KEY" python3 - "$HOME/.codex" "${AGENTPULSE_URL}/api/v1/hooks"
 
   echo "Codex CLI hooks configured in $HOOKS_FILE"
-  echo "Hooks feature enabled in $CONFIG_TOML"
 
 else
   echo "Error: Unknown agent type '$AGENT_TYPE'. Use 'claude_code' or 'codex_cli'."

@@ -405,22 +405,7 @@ echo "  ✓ Claude Code hooks → localhost:$PORT"
 # Codex CLI
 CODEX_DIR="$HOME/.codex"
 mkdir -p "$CODEX_DIR"
-CODEX_EVENTS=("SessionStart" "PreToolUse" "PostToolUse" "UserPromptSubmit" "Stop" "SubagentStart" "SubagentStop" "PermissionRequest" "PreCompact" "PostCompact")
-CODEX_HOOKS="["
-for i in "${!CODEX_EVENTS[@]}"; do
-  [[ $i -gt 0 ]] && CODEX_HOOKS+=","
-  CODEX_HOOKS+="{\"event\":\"${CODEX_EVENTS[$i]}\",\"type\":\"http\",\"url\":\"http://localhost:${PORT}/api/v1/hooks\",\"async\":true,\"headers\":{\"X-Agent-Type\":\"codex_cli\"}}"
-done
-CODEX_HOOKS+="]"
-echo "{\"hooks\":$CODEX_HOOKS}" > "$CODEX_DIR/hooks.json"
-# Hooks are stable and enabled by default since codex-cli 0.124.0; codex_hooks
-# is a recognized legacy alias for the `hooks` feature, written for
-# compatibility with older codex-cli installs that still gate on it.
-if [[ -f "$CODEX_DIR/config.toml" ]]; then
-  grep -q "codex_hooks" "$CODEX_DIR/config.toml" || echo -e "\n[features]\ncodex_hooks = true" >> "$CODEX_DIR/config.toml"
-else
-  echo -e "[features]\ncodex_hooks = true" > "$CODEX_DIR/config.toml"
-fi
+curl -fsSL "$REMOTE_URL/install-codex-hooks.py" | python3 - "$CODEX_DIR" "http://localhost:${PORT}/api/v1/hooks"
 echo "  ✓ Codex CLI hooks → localhost:$PORT"
 
 # ── Done ──
