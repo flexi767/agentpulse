@@ -88,7 +88,7 @@ async function main() {
 	// running. Demotion to a pure fallback is a follow-up once more
 	// reliability data is collected.
 	void startCodexObserver({
-		serverUrl: config.serverUrl,
+		serverUrl: process.env.AGENTPULSE_HOOK_SERVER_URL || config.serverUrl,
 		apiKey: config.apiKey ?? null,
 	}).catch((error) => {
 		console.error("[codex-observer] failed to start:", error);
