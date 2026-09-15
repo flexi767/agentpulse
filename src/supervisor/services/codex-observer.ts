@@ -56,6 +56,12 @@ function listRolloutFiles(sinceDaysAgo: number): string[] {
 			// unreadable dir — skip
 		}
 	}
+	// Resumed sessions retain their original date directory.
+	for (const entry of readdirSync(CODEX_SESSIONS_ROOT, { recursive: true })) {
+		if (typeof entry !== "string" || !entry.endsWith(".jsonl")) continue;
+		const path = join(CODEX_SESSIONS_ROOT, entry);
+		if (Date.now() - statSync(path).mtimeMs < 86_400_000 && !result.includes(path)) result.push(path);
+	}
 	return result;
 }
 
@@ -77,6 +83,9 @@ async function postHook(serverUrl: string, apiKey: string | null, payload: HookP
 		"X-Agent-Type": "codex_cli",
 	};
 	if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+	if (process.env.AGENTPULSE_OBSERVER_AUTH_FILE) {
+		headers.Authorization = readFileSync(process.env.AGENTPULSE_OBSERVER_AUTH_FILE, "utf8").trim();
+	}
 	const res = await fetch(`${serverUrl}/api/v1/hooks`, {
 		method: "POST",
 		headers,
@@ -296,5 +305,10 @@ export async function startCodexObserver(options: {
 
 	console.log("[codex-observer] scanning ~/.codex/sessions every", SCAN_INTERVAL_MS / 1000, "s");
 	await scan();
-	setInterval(scan, SCAN_INTERVAL_MS).unref();
+	let scanning = false;
+	setInterval(async () => {
+		if (scanning) return;
+		scanning = true;
+		try { await scan(); } finally { scanning = false; }
+	}, SCAN_INTERVAL_MS).unref();
 }
