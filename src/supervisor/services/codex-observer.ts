@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "
 import { open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
 
 const CODEX_SESSIONS_ROOT = join(homedir(), ".codex", "sessions");
 const STATE_FILE = join(homedir(), ".agentpulse", "codex-observer-state.json");
@@ -78,6 +79,18 @@ type HookPayload = {
 };
 
 async function postHook(serverUrl: string, apiKey: string | null, payload: HookPayload) {
+	if (process.env.AGENTPULSE_OBSERVER_AUTH_FILE) {
+		const authFile = join(homedir(), ".agentpulse", "hook-auth");
+		await new Promise<void>((resolve, reject) => {
+			const child = spawn("/usr/bin/curl", ["-fsS", "--connect-timeout", "5", "--max-time", "15", "-H", `@${authFile}`, "-H", "Content-Type: application/json", "-H", "X-Agent-Type: codex_cli", "--data-binary", "@-", `${serverUrl}/api/v1/hooks`], { stdio: ["pipe", "ignore", "pipe"] });
+			child.on("error", reject);
+			child.stderr.resume();
+			child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`hook curl exit ${code}`)));
+			child.stdin.on("error", reject);
+			child.stdin.end(JSON.stringify(payload));
+		});
+		return;
+	}
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
 		"X-Agent-Type": "codex_cli",
