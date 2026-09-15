@@ -12,6 +12,7 @@ import { useTabsStore } from "../stores/tabs-store.js";
 import { useUiPrefsStore } from "../stores/ui-prefs-store.js";
 import { AgentTypeBadge } from "./AgentTypeBadge.js";
 import { IntelligenceBadge } from "./IntelligenceBadge.js";
+import { SessionActivityBadge } from "./SessionActivityBadge.js";
 import { StatusBadge } from "./StatusBadge.js";
 
 interface SessionCardProps {
@@ -177,19 +178,7 @@ export function SessionCard({ session, intelligence }: SessionCardProps) {
 							{name}
 						</span>
 					)}
-					{session.semanticStatus === "waiting" ? (
-						<span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 flex-shrink-0">
-							<span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse-dot" />
-							waiting
-						</span>
-					) : (
-						session.isWorking && (
-							<span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 flex-shrink-0">
-								<span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse-dot" />
-								working
-							</span>
-						)
-					)}
+					<SessionActivityBadge working={session.isWorking} waiting={session.semanticStatus === "waiting"} />
 				</div>
 				<div className="flex items-center gap-1 flex-shrink-0">
 					{/* Mobile action row (U-H5): rename, pin, archive (if inactive),
@@ -435,9 +424,7 @@ export function SessionCard({ session, intelligence }: SessionCardProps) {
 			</div>
 
 			{/* Current task */}
-			{session.currentTask && (
-				<p className="text-xs text-foreground/70 truncate mt-2">{session.currentTask}</p>
-			)}
+			<p className="text-xs text-foreground/70 truncate mt-2 min-h-4">{session.currentTask || "\u00a0"}</p>
 		</div>
 	);
 }

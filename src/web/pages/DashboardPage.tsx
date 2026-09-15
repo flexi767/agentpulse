@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { isArchivedSession, isVisibleSession } from "../../shared/session-state.js";
 import { FirstRunWelcome } from "../components/FirstRunWelcome.js";
+import { SessionActivityBadge } from "../components/SessionActivityBadge.js";
 import { SessionGrid } from "../components/SessionGrid.js";
 import { StatCard } from "../components/StatCard.js";
 import { useSessions } from "../hooks/useSessions.js";
@@ -280,12 +281,7 @@ export function DashboardPage() {
 									>
 										<div className="flex items-center gap-2">
 											<span className="truncate text-sm font-medium">{label}</span>
-											{session.isWorking && (
-												<span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
-													<span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse-dot" />
-													Working
-												</span>
-											)}
+											<SessionActivityBadge working={session.isWorking} waiting={session.semanticStatus === "waiting"} />
 										</div>
 										<div className="mt-1 truncate text-[11px] text-muted-foreground">
 											{session.cwd?.split("/").pop() || "No project"}
