@@ -1,3 +1,4 @@
+import type { CostOverviewData, TurnResult } from "../../shared/session-results.js";
 import type {
 	ActionRequestDecision,
 	AskMessageRole,
@@ -195,6 +196,9 @@ export const api = {
 		return request<{ sessions: Session[]; total: number }>(`/sessions${qs ? `?${qs}` : ""}`);
 	},
 
+	getCostOverview: () => request<CostOverviewData>("/sessions/costs"),
+	getSessionResults: (sessionId: string) =>
+		request<{ turns: TurnResult[] }>(`/sessions/${sessionId}/results`),
 	getSession: (sessionId: string) =>
 		request<{ session: Session; events: SessionEvent[]; controlActions?: ControlAction[] }>(
 			`/sessions/${sessionId}`,

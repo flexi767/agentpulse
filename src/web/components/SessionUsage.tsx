@@ -1,5 +1,7 @@
+import type { ModelUsage } from "../../shared/session-results.js";
 import type { SessionTelemetry } from "../../shared/session-telemetry.js";
 import type { Session } from "../../shared/types.js";
+import { CostPopover } from "./CostPopover.js";
 
 export function SessionUsage({
 	session,
@@ -9,9 +11,10 @@ export function SessionUsage({
 	const fmt = (n: number | null | undefined) => (n == null ? "Unknown" : n.toLocaleString());
 	return (
 		<div className="text-xs text-muted-foreground space-y-1">
-			<div>
-				Model: <span className="text-foreground">{session.model || "Unknown"}</span>
-			</div>
+			<CostPopover
+				model={session.model}
+				usage={(session.metadata?.costUsage as ModelUsage[]) ?? []}
+			/>
 			<div>Tokens used: {t ? fmt(t.totalTokens) : "Not reported yet"}</div>
 			<div title="Input tokens in the latest model request, not cumulative session tokens.">
 				Latest context: {t ? fmt(t.contextTokens) : "Unknown"}

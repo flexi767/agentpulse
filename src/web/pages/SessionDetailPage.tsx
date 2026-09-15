@@ -18,6 +18,7 @@ import {
 	type WorkspaceTab,
 } from "../components/session-detail/SessionHeader.js";
 import { SessionPromptComposer } from "../components/session-detail/SessionPromptComposer.js";
+import { SessionResults } from "../components/session-detail/SessionResults.js";
 import {
 	CodexStatusHint,
 	ManagedClaudeStatus,
@@ -65,7 +66,7 @@ export function SessionDetailPage() {
 
 	const requestedTab = searchParams.get("tab") as WorkspaceTab | null;
 	const initialWorkspaceTab: WorkspaceTab =
-		requestedTab && WORKSPACE_TABS.includes(requestedTab) ? requestedTab : "activity";
+		requestedTab && WORKSPACE_TABS.includes(requestedTab) ? requestedTab : "results";
 	const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(initialWorkspaceTab);
 
 	const [loadingContext, setLoadingContext] = useState(false);
@@ -342,7 +343,9 @@ export function SessionDetailPage() {
 			<ControlHistory actions={controlActions} />
 
 			<div className="flex-1 min-h-0">
-				{workspaceTab === "overview" ? (
+				{workspaceTab === "results" ? (
+					<SessionResults sessionId={session.sessionId} />
+				) : workspaceTab === "overview" ? (
 					<div className="grid gap-4 p-3 md:p-6 md:grid-cols-2 xl:grid-cols-4">
 						<SummaryField label="Project" value={session.cwd} mono />
 						<SummaryField label="Agent" value={session.agentType} />

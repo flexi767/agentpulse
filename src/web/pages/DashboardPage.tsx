@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { isArchivedSession, isVisibleSession } from "../../shared/session-state.js";
+import { CostOverview } from "../components/CostOverview.js";
 import { FirstRunWelcome } from "../components/FirstRunWelcome.js";
 import { SessionActivityBadge } from "../components/SessionActivityBadge.js";
 import { SessionGrid } from "../components/SessionGrid.js";
@@ -131,6 +132,7 @@ export function DashboardPage() {
 				</div>
 			</div>
 
+			<CostOverview />
 			{/* KPI Row */}
 			<div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
 				<StatCard

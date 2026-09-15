@@ -16,6 +16,7 @@ def backup(path):
 
 helper = root / 'session-hook.py'
 if helper.resolve() != Path(__file__).with_name('session-hook.py').resolve(): shutil.copy2(Path(__file__).with_name('session-hook.py'), helper)
+shutil.copy2(Path(__file__).with_name('session-results.py'), root / 'session-results.py') if Path(__file__).with_name('session-results.py').resolve() != (root / 'session-results.py').resolve() else None
 (root / 'local-api-url').write_text(args.local_url + '\n')
 forward = root / 'forward-hook.sh'
 if forward.exists():

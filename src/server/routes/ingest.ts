@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { TurnResult } from "../../shared/session-results.js";
 import type { HookEventPayload, SemanticStatusUpdate } from "../../shared/types.js";
 import { requireApiKey } from "../auth/middleware.js";
 import { hookRateLimit } from "../middleware/hook-rate-limit.js";
@@ -14,6 +15,7 @@ import {
 	claimSessionFeedback,
 	updateSessionTelemetry,
 } from "../services/session-feedback.js";
+import { saveSessionResults } from "../services/session-results.js";
 import { getSession } from "../services/session-tracker.js";
 import {
 	decrementInFlightCount,
@@ -106,6 +108,35 @@ function sanitizeLogField(value: unknown, maxLen = 64): string {
 }
 
 const ingest = new Hono();
+ingest.post("/results", requireApiKey(), async (c) => {
+	try {
+		const body = await c.req.json<{ session_id: string; host_name: string; turns: TurnResult[] }>();
+		if (typeof body.session_id !== "string" || typeof body.host_name !== "string")
+			return c.json({ error: "Missing session or host" }, 400);
+		// Serialize turn upserts with hook ingestion for this session.
+		const prior = sessionTaskQueues.get(body.session_id) ?? Promise.resolve();
+		let ok = false;
+		const task = prior
+			.catch(() => {})
+			.then(async () => {
+				ok = await saveSessionResults(body.session_id, body.host_name, body.turns);
+			});
+		sessionTaskQueues.set(body.session_id, task);
+		try {
+			await task;
+		} finally {
+			if (sessionTaskQueues.get(body.session_id) === task)
+				sessionTaskQueues.delete(body.session_id);
+		}
+		if (ok) {
+			const session = await getSession(body.session_id);
+			if (session) notifySessionUpdated(session);
+		}
+		return c.json({ ok });
+	} catch {
+		return c.json({ error: "Invalid turn results" }, 400);
+	}
+});
 
 ingest.post("/feedback/claim", requireApiKey(), async (c) => {
 	const body = await c.req.json<{ session_id?: string; host_name?: string }>();

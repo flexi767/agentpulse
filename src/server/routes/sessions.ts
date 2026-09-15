@@ -1,6 +1,8 @@
-import { and, asc, desc, eq, gt, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm";
 import type { Context } from "hono";
 import { Hono } from "hono";
+import { costTotal } from "../../shared/model-pricing.js";
+import type { ExpensiveTask, ModelUsage, TurnResult } from "../../shared/session-results.js";
 import type { AgentType, SessionStatus } from "../../shared/types.js";
 import { type AuthUser, requireAuth } from "../auth/middleware.js";
 import { callerHasManageScope, requireOperatorScope } from "../auth/route-scope-policy.js";
@@ -14,6 +16,7 @@ import {
 	retryLaunchForSession,
 } from "../services/control-actions.js";
 import { queueSessionFeedback } from "../services/session-feedback.js";
+import { getSessionResults } from "../services/session-results.js";
 import {
 	applyNativeName,
 	getSession,
@@ -64,6 +67,82 @@ sessionsRouter.get("/sessions/stats", async (c) => {
 	return c.json(stats);
 });
 
+sessionsRouter.get("/sessions/:sessionId/results", async (c) =>
+	c.json({ turns: await getSessionResults(c.req.param("sessionId")) }),
+);
+
+sessionsRouter.get("/sessions/costs", async (c) => {
+	const rows = await getDb()
+		.select({
+			raw: events.rawPayload,
+			sessionId: events.sessionId,
+			name: sessions.displayName,
+			metadata: sessions.metadata,
+		})
+		.from(events)
+		.innerJoin(sessions, eq(sessions.sessionId, events.sessionId))
+		.where(eq(events.providerEventType, "agentpulse_turn_result"))
+		.orderBy(desc(events.createdAt))
+		.limit(5000);
+	const sessionRows = await getDb()
+		.select({ id: sessions.sessionId, name: sessions.displayName, metadata: sessions.metadata })
+		.from(sessions);
+	let known = 0;
+	let unknownTokens = 0;
+	let turnCount = 0;
+	let unreportedTurns = 0;
+	const expensiveSessions: ExpensiveTask[] = sessionRows
+		.map((s) => {
+			const usage = (s.metadata?.costUsage ?? []) as ModelUsage[];
+			const cost = costTotal(usage);
+			known += cost.known;
+			unknownTokens += cost.unknownTokens;
+			turnCount += Number(s.metadata?.resultTurns ?? 0);
+			unreportedTurns += Number(s.metadata?.resultUnreportedTurns ?? 0);
+			return {
+				sessionId: s.id,
+				sessionName: s.name || s.id,
+				host: String(s.metadata?.hostName || "Unknown"),
+				turnId: "",
+				prompt: s.name || s.id,
+				usage,
+				toolCalls: Number(s.metadata?.resultToolCalls ?? 0),
+				durationMs: Number(s.metadata?.resultDurationMs ?? 0),
+			};
+		})
+		.filter((s) => costTotal(s.usage).known > 0)
+		.sort((a, b) => costTotal(b.usage).known - costTotal(a.usage).known)
+		.slice(0, 10);
+	const tasks = rows
+		.map((row) => {
+			const r = row.raw as unknown as TurnResult;
+			const cost = costTotal(r.usage);
+			return {
+				sessionId: row.sessionId,
+				sessionName: row.name || row.sessionId,
+				host: String(row.metadata?.hostName || "Unknown"),
+				turnId: r.id,
+				prompt: r.prompts.join("\n"),
+				usage: r.usage,
+				toolCalls: r.toolCalls,
+				durationMs: r.durationMs,
+				cost: cost.known,
+			};
+		})
+		.filter((t) => t.cost > 0)
+		.sort((a, b) => b.cost - a.cost)
+		.slice(0, 10);
+	return c.json({
+		tasks,
+		sessions: expensiveSessions,
+		turnCount,
+		rankedTurns: rows.length,
+		known,
+		unknownTokens,
+		unreportedTurns,
+	});
+});
+
 // GET /api/v1/sessions/:sessionId - Session detail
 sessionsRouter.get("/sessions/:sessionId", async (c: Context) => {
 	const sessionId = c.req.param("sessionId");
@@ -77,7 +156,12 @@ sessionsRouter.get("/sessions/:sessionId", async (c: Context) => {
 	const sessionEvents = await getDb()
 		.select()
 		.from(events)
-		.where(eq(events.sessionId, sessionId))
+		.where(
+			and(
+				eq(events.sessionId, sessionId),
+				sql`(${events.providerEventType} IS NULL OR ${events.providerEventType} != 'agentpulse_turn_result')`,
+			),
+		)
 		.orderBy(desc(events.createdAt))
 		.limit(500);
 
@@ -101,7 +185,12 @@ sessionsRouter.get("/sessions/:sessionId/timeline", async (c) => {
 	const sessionEvents = await getDb()
 		.select()
 		.from(events)
-		.where(eq(events.sessionId, sessionId))
+		.where(
+			and(
+				eq(events.sessionId, sessionId),
+				sql`(${events.providerEventType} IS NULL OR ${events.providerEventType} != 'agentpulse_turn_result')`,
+			),
+		)
 		.orderBy(desc(events.createdAt))
 		.limit(limit)
 		.offset(offset);
@@ -356,7 +445,14 @@ sessionsRouter.delete("/sessions/:sessionId", async (c) => {
 
 	await withTransaction(async (tx) => {
 		// Cascade does this; explicit for older DBs that haven't yet rebuilt FKs.
-		await tx.delete(events).where(eq(events.sessionId, sessionId));
+		await tx
+			.delete(events)
+			.where(
+				and(
+					eq(events.sessionId, sessionId),
+					sql`(${events.providerEventType} IS NULL OR ${events.providerEventType} != 'agentpulse_turn_result')`,
+				),
+			);
 		await tx.delete(sessions).where(eq(sessions.sessionId, sessionId));
 	});
 

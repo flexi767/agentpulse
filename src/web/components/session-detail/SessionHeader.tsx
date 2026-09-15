@@ -19,9 +19,17 @@ import {
 import type { TimelineMode } from "./TimelineView.js";
 import { buildExportMarkdown } from "./export-markdown.js";
 
-export type WorkspaceTab = "overview" | "activity" | "notes" | "instructions" | "launch" | "ai";
+export type WorkspaceTab =
+	| "results"
+	| "overview"
+	| "activity"
+	| "notes"
+	| "instructions"
+	| "launch"
+	| "ai";
 
 export const WORKSPACE_TABS: WorkspaceTab[] = [
+	"results",
 	"overview",
 	"activity",
 	"notes",
@@ -225,6 +233,11 @@ export function SessionHeader(props: SessionHeaderProps) {
 			{/* Workspace tabs + activity filters */}
 			<div className="px-3 md:px-6 py-1.5 md:py-2 border-t border-border/70 flex flex-col items-stretch gap-1.5 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-3">
 				<div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto md:flex-wrap md:gap-2">
+					<WorkspaceTabButton
+						active={workspaceTab === "results"}
+						label="Results"
+						onClick={() => onSelectTab("results")}
+					/>
 					<WorkspaceTabButton
 						active={workspaceTab === "overview"}
 						label="Overview"

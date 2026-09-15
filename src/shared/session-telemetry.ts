@@ -1,4 +1,5 @@
 export interface SessionTelemetry {
+	accounting?: "responses";
 	inputTokens: number;
 	cachedInputTokens: number;
 	cacheWriteTokens: number;

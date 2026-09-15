@@ -5,7 +5,7 @@ import { sessions } from "../db/schema/index.js";
 
 type SessionRow = typeof sessions.$inferSelect;
 // Retry stale metadata snapshots so concurrent hooks cannot erase feedback.
-async function mutateSession<T>(
+export async function mutateSession<T>(
 	sessionId: string,
 	change: (row: SessionRow | undefined) => { result: T; updates?: Partial<SessionRow> },
 ): Promise<T> {
@@ -160,14 +160,21 @@ export async function updateSessionTelemetry(
 			if (!["codex_transcript", "claude_transcript"].includes(String(t.source)))
 				return { result: false };
 			safe.source = t.source;
+			if (t.accounting === "responses") safe.accounting = "responses";
 			safe.updatedAt = typeof t.updatedAt === "string" ? t.updatedAt : new Date().toISOString();
-			const previous = row.metadata?.telemetry as { updatedAt?: string } | undefined;
+			const previous = row.metadata?.telemetry as
+				| { updatedAt?: string; accounting?: string }
+				| undefined;
+			if (previous?.accounting === "responses" && safe.accounting !== "responses")
+				return { result: false };
 			if (!Number.isFinite(Date.parse(String(safe.updatedAt)))) return { result: false };
 			if (
 				previous?.updatedAt &&
 				Date.parse(String(safe.updatedAt)) < Date.parse(previous.updatedAt)
 			)
 				return { result: false };
+			if (safe.contextWindow == null && previous)
+				safe.contextWindow = (previous as Record<string, unknown>).contextWindow ?? null;
 			updates.metadata = { ...(updates.metadata ?? row.metadata), telemetry: safe };
 		}
 		if (!Object.keys(updates).length) return { result: false };

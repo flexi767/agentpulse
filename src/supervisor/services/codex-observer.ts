@@ -275,6 +275,24 @@ async function processRolloutFile(
 				);
 		}
 
+		if (entry.type === "token_usage_record" && entry.payload?.thread_token_usage) {
+			const telemetry = codexTelemetry(
+				{
+					total_token_usage: entry.payload.thread_token_usage,
+					last_token_usage: entry.payload.usage,
+				},
+				entry.timestamp || new Date().toISOString(),
+			);
+			if (telemetry) {
+				telemetry.accounting = "responses";
+				await postHook(
+					serverUrl,
+					apiKey,
+					{ session_id: sessionId, hook_event_name: "Telemetry", telemetry },
+					"/telemetry",
+				);
+			}
+		}
 		if (entry.type === "response_item") {
 			const p = entry.payload ?? {};
 			const kind = typeof p.type === "string" ? p.type : "";
@@ -353,6 +371,29 @@ export async function startCodexObserver(options: {
 
 	const state = loadState();
 	const callMapsByFile = new Map<string, CallMap>();
+	const resultScans = new Map<string, number>();
+	async function collectResults(file: string, sessionId: string) {
+		const helper = join(homedir(), ".agentpulse", "session-hook.py");
+		if (!existsSync(helper)) return;
+		await new Promise<void>((resolve) => {
+			const child = spawn("python3", [helper, "codex_cli", "--telemetry-only"], {
+				stdio: ["pipe", "ignore", "ignore"],
+			});
+			const timeout = setTimeout(() => {
+				child.kill();
+			}, 25000);
+			child.on("error", () => {
+				clearTimeout(timeout);
+				resolve();
+			});
+			child.on("close", () => {
+				clearTimeout(timeout);
+				resolve();
+			});
+			child.stdin.on("error", () => {});
+			child.stdin.end(JSON.stringify({ session_id: sessionId, transcript_path: file }));
+		});
+	}
 
 	async function scan() {
 		const files = listRolloutFiles(BACKFILL_DAYS);
@@ -378,7 +419,12 @@ export async function startCodexObserver(options: {
 					options.apiKey,
 					callMap,
 				);
+				const changed = next.offset !== state.files[file]?.offset;
 				state.files[file] = next;
+				if (next.sessionId && (changed || Date.now() - (resultScans.get(file) ?? 0) > 30000)) {
+					resultScans.set(file, Date.now());
+					await collectResults(file, next.sessionId);
+				}
 				saveState(state);
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Collect transcript usage and emit queued feedback through agent hooks."""
+import importlib.util
 import fcntl
 import hashlib
 import json
@@ -44,9 +45,10 @@ def scan(path, agent_type):
             except (FileNotFoundError, ValueError):
                 states = {}
         state = states.get(str(path), {'offset': 0, 'requests': {}})
+        if state.get('version') != 2: state = {'version':2,'offset':0,'requests':{}}
         size = path.stat().st_size
         if state['offset'] > size:
-            state = {'offset': 0, 'requests': {}}
+            state = {'version':2,'offset': 0, 'requests': {}}
         with path.open('rb') as handle:
             handle.seek(state['offset'])
             raw = handle.read(8 * 1024 * 1024)
@@ -65,7 +67,7 @@ def scan(path, agent_type):
             if entry.get('type') in ('session_meta', 'turn_context') and payload.get('model'):
                 state['model'] = payload['model']
                 state['modelUpdatedAt'] = entry.get('timestamp')
-            if payload.get('type') == 'token_count' and isinstance(payload.get('info'), dict) and payload['info'].get('total_token_usage'):
+            if (state.get('telemetry') or {}).get('accounting') != 'responses' and payload.get('type') == 'token_count' and isinstance(payload.get('info'), dict) and payload['info'].get('total_token_usage'):
                 info = payload['info']; total = info['total_token_usage']; last = info.get('last_token_usage')
                 state['telemetry'] = {
                     'inputTokens': number(total.get('input_tokens')),
@@ -78,6 +80,14 @@ def scan(path, agent_type):
                     'contextWindow': info.get('model_context_window'),
                     'updatedAt': entry.get('timestamp'), 'source': 'codex_transcript',
                 }
+            if entry.get('type') == 'token_usage_record' and isinstance(payload.get('thread_token_usage'), dict):
+                total = payload['thread_token_usage']; last = payload.get('usage') or {}
+                state['telemetry'] = {**(state.get('telemetry') or {}), 'accounting':'responses',
+                    'inputTokens':number(total.get('input_tokens')), 'cachedInputTokens':number(total.get('cached_input_tokens')),
+                    'cacheWriteTokens':number(total.get('cache_write_input_tokens')), 'outputTokens':number(total.get('output_tokens')),
+                    'reasoningTokens':number(total.get('reasoning_output_tokens')), 'totalTokens':number(total.get('total_tokens')),
+                    'contextTokens':number(last.get('input_tokens')), 'contextWindow':(state.get('telemetry') or {}).get('contextWindow'),
+                    'source':'codex_transcript', 'updatedAt':entry.get('timestamp')}
             message = entry.get('message') or {}
             if not isinstance(message, dict): continue
             if agent_type == 'claude_code' and entry.get('type') == 'assistant' and isinstance(message.get('usage'), dict):
@@ -104,6 +114,17 @@ def scan(path, agent_type):
         temporary.replace(state_path)
         return state, state['offset'] >= size
 
+def collect_results(path, agent_type, common, backfill=False):
+    spec = importlib.util.spec_from_file_location('session_results', Path(__file__).with_name('session-results.py'))
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    while True:
+        turns, complete, dest = module.scan(path, agent_type, ROOT)
+        if turns:
+            result = post('/results', {**common, 'turns': turns})
+            if not result.get('ok'): return
+            module.ack(dest, {r['id']:r['updatedAt'] for r in turns})
+        if not backfill or (complete and not turns): return
+
 def main():
     payload = json.load(sys.stdin)
     agent_type = sys.argv[1] if len(sys.argv) > 1 else 'codex_cli'
@@ -127,6 +148,9 @@ def main():
             post('/telemetry', {**common, 'model': state.get('model'), 'telemetry': state.get('telemetry'), 'observed_at': state.get('modelUpdatedAt')})
         except (OSError, ValueError):
             pass
+    if path and Path(path).exists():
+        try: collect_results(path, agent_type, common, '--telemetry-only' in sys.argv)
+        except (OSError, ValueError): pass
     if '--telemetry-only' in sys.argv: return
     event = payload.get('hook_event_name')
     if event not in ('PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'SessionStart'): return

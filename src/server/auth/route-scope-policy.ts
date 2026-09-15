@@ -64,6 +64,8 @@ export const OBSERVE_READ_PATHS: ReadonlySet<string> = new Set([
  * router) — those never pass through requireOperatorScope().
  */
 export const INTENTIONALLY_MANAGE_ONLY: ReadonlySet<string> = new Set([
+	"/sessions/costs",
+	"/sessions/:sessionId/results",
 	// C1 — leaking DTOs (env vars, launchSpec, claimToken, injected prompts)
 	"/sessions/:sessionId/control-actions",
 	"/templates",
@@ -158,6 +160,7 @@ export function classifyRoute(
 ): typeof SCOPE_OBSERVE | typeof SCOPE_MANAGE {
 	if (!READ_METHODS.has(method.toUpperCase())) return SCOPE_MANAGE;
 	const normalized = normalizeRoutePath(path);
+	if (matchesAnyTemplate(normalized, INTENTIONALLY_MANAGE_ONLY)) return SCOPE_MANAGE;
 	return matchesAnyTemplate(normalized, OBSERVE_READ_PATHS) ? SCOPE_OBSERVE : SCOPE_MANAGE;
 }
 

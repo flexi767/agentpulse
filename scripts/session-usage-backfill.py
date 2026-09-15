@@ -24,6 +24,7 @@ for sid, path in paths.items():
             previous = state['offset']
             state, complete = hook.scan(path, known[sid]['agentType'])
             if state['offset'] == previous: break
+        hook.collect_results(path, known[sid]['agentType'], {'session_id':sid,'host_name':hook.HOST}, True)
         result = hook.post('/telemetry', {'session_id':sid,'host_name':hook.HOST,'model':state.get('model'),'telemetry':state.get('telemetry'),'observed_at':state.get('modelUpdatedAt')})
         print(json.dumps({'sessionId':sid,'host':hook.HOST,'reported':result.get('ok'),'model':state.get('model'),'tokens':(state.get('telemetry') or {}).get('totalTokens')}),flush=True)
     except (OSError,ValueError) as error:
