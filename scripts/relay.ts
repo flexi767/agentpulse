@@ -435,7 +435,7 @@ async function processHookQueue() {
 			if (!leased) break;
 
 			try {
-				await forwardApiRequest({
+				const response = await forwardApiRequest({
 					pathname: leased.item.pathname,
 					search: leased.item.search,
 					method: leased.item.method,
@@ -443,6 +443,7 @@ async function processHookQueue() {
 					agentType: leased.item.agentType,
 					body: leased.item.body,
 				});
+				if (!response.ok) throw new Error(`Hook upstream returned ${response.status}`);
 				await completeHookSuccess(leased.fileName);
 			} catch (error) {
 				await releaseHookFailure(leased.fileName, leased.item, error);
