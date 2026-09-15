@@ -9,6 +9,11 @@ import {
 	processStatusUpdate,
 } from "../services/event-processor.js";
 import { notifyChannel, notifySessionCreated, notifySessionUpdated } from "../services/notifier.js";
+import {
+	acknowledgeSessionFeedback,
+	claimSessionFeedback,
+	updateSessionTelemetry,
+} from "../services/session-feedback.js";
 import { getSession } from "../services/session-tracker.js";
 import {
 	decrementInFlightCount,
@@ -101,6 +106,49 @@ function sanitizeLogField(value: unknown, maxLen = 64): string {
 }
 
 const ingest = new Hono();
+
+ingest.post("/feedback/claim", requireApiKey(), async (c) => {
+	const body = await c.req.json<{ session_id?: string; host_name?: string }>();
+	if (typeof body.session_id !== "string" || typeof body.host_name !== "string")
+		return c.json({ error: "Missing session or host." }, 400);
+	return c.json({ feedback: await claimSessionFeedback(body.session_id, body.host_name) });
+});
+ingest.post("/feedback/ack", requireApiKey(), async (c) => {
+	const body = await c.req.json<{ session_id?: string; host_name?: string; ids?: string[] }>();
+	if (
+		typeof body.session_id !== "string" ||
+		typeof body.host_name !== "string" ||
+		!Array.isArray(body.ids) ||
+		!body.ids.every((v) => typeof v === "string")
+	)
+		return c.json({ error: "Invalid acknowledgement." }, 400);
+	return c.json({
+		ok: await acknowledgeSessionFeedback(body.session_id, body.host_name, body.ids),
+	});
+});
+ingest.post("/telemetry", requireApiKey(), async (c) => {
+	const body = await c.req.json<{
+		session_id?: string;
+		host_name?: string;
+		model?: string;
+		telemetry?: unknown;
+		observed_at?: string;
+	}>();
+	if (typeof body.session_id !== "string" || typeof body.host_name !== "string")
+		return c.json({ error: "Missing session or host." }, 400);
+	const ok = await updateSessionTelemetry(
+		body.session_id,
+		body.host_name,
+		body.model,
+		body.telemetry,
+		body.observed_at,
+	);
+	if (ok) {
+		const session = await getSession(body.session_id);
+		if (session) notifySessionUpdated(session);
+	}
+	return c.json({ ok });
+});
 
 // POST /api/v1/hooks - Receive hook events from Claude Code and Codex CLI
 //

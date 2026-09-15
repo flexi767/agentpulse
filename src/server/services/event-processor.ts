@@ -26,6 +26,7 @@ import { associateObservedSession } from "./launch-dispatch.js";
 import { generateSessionName } from "./name-generator.js";
 import { getCachedProjects } from "./projects/cache.js";
 import { resolveProjectIdForCwd } from "./projects/resolver.js";
+import { setSessionHost } from "./session-feedback.js";
 
 function chooseHigherAuthorityEvent<
 	T extends { source: EventSource | string; createdAt?: string | null },
@@ -459,9 +460,6 @@ export async function processHookEvent(
 
 	if (payload.cwd) updates.cwd = payload.cwd;
 	if (payload.model) updates.model = payload.model;
-	if (typeof payload.host_name === "string" && payload.host_name.trim()) {
-		updates.metadata = { ...(existing[0]?.metadata ?? {}), hostName: payload.host_name.trim() };
-	}
 
 	// Handle session end events
 	if (eventType === "SessionEnd") {
@@ -515,6 +513,8 @@ export async function processHookEvent(
 	}
 
 	await getDb().update(sessions).set(updates).where(eq(sessions.sessionId, sessionId));
+	if (typeof payload.host_name === "string" && payload.host_name.trim())
+		await setSessionHost(sessionId, payload.host_name.trim());
 
 	// Decision 10: permission-wait tracking. Runs after the main update (not
 	// folded into the early-snapshot `updates` object above) via its own late

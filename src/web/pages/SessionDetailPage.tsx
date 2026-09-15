@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { ControlAction, Session, SessionEvent } from "../../shared/types.js";
+import { SessionUsage } from "../components/SessionUsage.js";
 import { ActivityTimeline } from "../components/session-detail/ActivityTimeline.js";
 import { AiPanel } from "../components/session-detail/AiPanel.js";
 import { ControlHistory } from "../components/session-detail/ControlHistory.js";
@@ -10,6 +11,7 @@ import {
 	NotesPanel,
 	SummaryField,
 } from "../components/session-detail/Panels.js";
+import { SessionFeedbackPanel } from "../components/session-detail/SessionFeedbackPanel.js";
 import {
 	SessionHeader,
 	WORKSPACE_TABS,
@@ -27,6 +29,7 @@ import {
 	mergeSessionEvents,
 } from "../components/session-detail/TimelineView.js";
 import { api } from "../lib/api.js";
+import { sessionHost } from "../lib/session-host.js";
 import { useEventStore } from "../stores/event-store.js";
 import { useSessionStore } from "../stores/session-store.js";
 import { useTabsStore } from "../stores/tabs-store.js";
@@ -345,13 +348,11 @@ export function SessionDetailPage() {
 						<SummaryField label="Agent" value={session.agentType} />
 						<SummaryField label="Started" value={session.startedAt} />
 						<SummaryField label="Status" value={session.status} />
-						<SummaryField label="Model" value={session.model} />
+						<SessionUsage session={session} />
 						<SummaryField label="Branch" value={session.gitBranch} mono />
 						<SummaryField label="Current task" value={session.currentTask} />
 						<SummaryField label="Tools" value={String(session.totalToolUses)} />
-						{session.managedSession?.hostName ? (
-							<SummaryField label="Host" value={session.managedSession.hostName} mono />
-						) : null}
+						<SummaryField label="Host" value={sessionHost(session)} mono />
 						{session.managedSession?.launchRequestId ? (
 							<SummaryField
 								label="Launch request"
@@ -398,6 +399,7 @@ export function SessionDetailPage() {
 			{session.agentType === "claude_code" && session.managedSession ? (
 				<SessionPromptComposer session={session} onSubmitted={loadSessionWorkspace} />
 			) : null}
+			<SessionFeedbackPanel session={session} onSubmitted={loadSessionWorkspace} />
 		</div>
 	);
 }

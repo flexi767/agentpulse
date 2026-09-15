@@ -4,8 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Session } from "../../shared/types.js";
 import { type SessionIntelligence, api } from "../lib/api.js";
-import { extractProjectName, formatDuration, getSessionMode, projectColor } from "../lib/utils.js";
 import { sessionHost } from "../lib/session-host.js";
+import { extractProjectName, formatDuration, getSessionMode, projectColor } from "../lib/utils.js";
 import { useLabsStore } from "../stores/labs-store.js";
 import { useProjectsStore } from "../stores/projects-store.js";
 import { useSessionStore } from "../stores/session-store.js";
@@ -14,6 +14,7 @@ import { useUiPrefsStore } from "../stores/ui-prefs-store.js";
 import { AgentTypeBadge } from "./AgentTypeBadge.js";
 import { IntelligenceBadge } from "./IntelligenceBadge.js";
 import { SessionActivityBadge } from "./SessionActivityBadge.js";
+import { SessionUsage } from "./SessionUsage.js";
 import { StatusBadge } from "./StatusBadge.js";
 
 interface SessionCardProps {
@@ -179,7 +180,10 @@ export function SessionCard({ session, intelligence }: SessionCardProps) {
 							{name}
 						</span>
 					)}
-					<SessionActivityBadge working={session.isWorking} waiting={session.semanticStatus === "waiting"} />
+					<SessionActivityBadge
+						working={session.isWorking}
+						waiting={session.semanticStatus === "waiting"}
+					/>
 				</div>
 				<div className="flex items-center gap-1 flex-shrink-0">
 					{/* Mobile action row (U-H5): rename, pin, archive (if inactive),
@@ -426,7 +430,12 @@ export function SessionCard({ session, intelligence }: SessionCardProps) {
 			</div>
 
 			{/* Current task */}
-			<p className="text-xs text-foreground/70 truncate mt-2 min-h-4">{session.currentTask || "\u00a0"}</p>
+			<div className="mt-2">
+				<SessionUsage session={session} compact />
+			</div>
+			<p className="text-xs text-foreground/70 truncate mt-2 min-h-4">
+				{session.currentTask || "\u00a0"}
+			</p>
 		</div>
 	);
 }

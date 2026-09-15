@@ -13,6 +13,7 @@ import {
 	queueStopAction,
 	retryLaunchForSession,
 } from "../services/control-actions.js";
+import { queueSessionFeedback } from "../services/session-feedback.js";
 import {
 	applyNativeName,
 	getSession,
@@ -30,6 +31,20 @@ sessionsRouter.use("*", requireAuth());
 // read-only routes in OBSERVE_READ_PATHS (list, detail, timeline, event
 // context, claude-md); mutating routes and control-actions stay manage-only.
 sessionsRouter.use("*", requireOperatorScope());
+
+sessionsRouter.post("/sessions/:sessionId/feedback", async (c) => {
+	try {
+		const body = await c.req.json<{ text?: string }>();
+		if (typeof body.text !== "string") return c.json({ error: "Feedback text is required." }, 400);
+		const feedback = await queueSessionFeedback(c.req.param("sessionId"), body.text);
+		return c.json({ feedback }, 201);
+	} catch (error) {
+		return c.json(
+			{ error: error instanceof Error ? error.message : "Cannot queue feedback." },
+			400,
+		);
+	}
+});
 
 // GET /api/v1/sessions - List sessions
 sessionsRouter.get("/sessions", async (c) => {

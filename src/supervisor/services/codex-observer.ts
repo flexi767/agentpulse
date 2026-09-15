@@ -1,8 +1,9 @@
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { type SessionTelemetry, codexTelemetry } from "../../shared/session-telemetry.js";
 
 const CODEX_SESSIONS_ROOT = join(homedir(), ".codex", "sessions");
 const STATE_FILE = join(homedir(), ".agentpulse", "codex-observer-state.json");
@@ -61,7 +62,8 @@ function listRolloutFiles(sinceDaysAgo: number): string[] {
 	for (const entry of readdirSync(CODEX_SESSIONS_ROOT, { recursive: true })) {
 		if (typeof entry !== "string" || !entry.endsWith(".jsonl")) continue;
 		const path = join(CODEX_SESSIONS_ROOT, entry);
-		if (Date.now() - statSync(path).mtimeMs < 86_400_000 && !result.includes(path)) result.push(path);
+		if (Date.now() - statSync(path).mtimeMs < 86_400_000 && !result.includes(path))
+			result.push(path);
 	}
 	return result.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
 }
@@ -76,17 +78,45 @@ type HookPayload = {
 	tool_response?: unknown;
 	last_assistant_message?: string;
 	prompt?: string;
+	telemetry?: SessionTelemetry;
+	observed_at?: string;
 };
 
-async function postHook(serverUrl: string, apiKey: string | null, payload: HookPayload) {
+async function postHook(
+	serverUrl: string,
+	apiKey: string | null,
+	payload: HookPayload,
+	route = "/hooks",
+) {
 	const hostedPayload = { ...payload, host_name: process.env.AGENTPULSE_HOST_NAME || hostname() };
 	if (process.env.AGENTPULSE_OBSERVER_AUTH_FILE) {
 		const authFile = join(homedir(), ".agentpulse", "hook-auth");
 		await new Promise<void>((resolve, reject) => {
-			const child = spawn("/usr/bin/curl", ["-fsS", "--connect-timeout", "5", "--max-time", "15", "-H", `@${authFile}`, "-H", "Content-Type: application/json", "-H", "X-Agent-Type: codex_cli", "--data-binary", "@-", `${serverUrl}/api/v1/hooks`], { stdio: ["pipe", "ignore", "pipe"] });
+			const child = spawn(
+				"/usr/bin/curl",
+				[
+					"-fsS",
+					"--connect-timeout",
+					"5",
+					"--max-time",
+					"15",
+					"-H",
+					`@${authFile}`,
+					"-H",
+					"Content-Type: application/json",
+					"-H",
+					"X-Agent-Type: codex_cli",
+					"--data-binary",
+					"@-",
+					`${serverUrl}/api/v1${route}`,
+				],
+				{ stdio: ["pipe", "ignore", "pipe"] },
+			);
 			child.on("error", reject);
 			child.stderr.resume();
-			child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`hook curl exit ${code}`)));
+			child.on("close", (code) =>
+				code === 0 ? resolve() : reject(new Error(`hook curl exit ${code}`)),
+			);
 			child.stdin.on("error", reject);
 			child.stdin.end(JSON.stringify(hostedPayload));
 		});
@@ -100,7 +130,7 @@ async function postHook(serverUrl: string, apiKey: string | null, payload: HookP
 	if (process.env.AGENTPULSE_OBSERVER_AUTH_FILE) {
 		headers.Authorization = readFileSync(process.env.AGENTPULSE_OBSERVER_AUTH_FILE, "utf8").trim();
 	}
-	const res = await fetch(`${serverUrl}/api/v1/hooks`, {
+	const res = await fetch(`${serverUrl}/api/v1${route}`, {
 		method: "POST",
 		headers,
 		body: JSON.stringify(hostedPayload),
@@ -168,9 +198,10 @@ async function processRolloutFile(
 	// Bound replay work so one long session cannot starve other live sessions.
 	const completeLines = allCompleteLines.slice(0, 100);
 	const incomplete = endsWithNewline ? "" : lines[lines.length - 1];
-	const consumedBytes = completeLines.length < allCompleteLines.length
-		? Buffer.byteLength(`${completeLines.join("\n")}\n`, "utf8")
-		: bytesToRead - Buffer.byteLength(incomplete, "utf8");
+	const consumedBytes =
+		completeLines.length < allCompleteLines.length
+			? Buffer.byteLength(`${completeLines.join("\n")}\n`, "utf8")
+			: bytesToRead - Buffer.byteLength(incomplete, "utf8");
 	const newOffset = startOffset + consumedBytes;
 
 	let sessionId = stateEntry?.sessionId ?? "";
@@ -192,7 +223,7 @@ async function processRolloutFile(
 	// thoughts/shared/plans/active/2026-07-17-deliver-client-currency-remediation.md.
 	for (const line of completeLines) {
 		if (!line.trim()) continue;
-		let entry: { type?: string; payload?: Record<string, unknown> };
+		let entry: { type?: string; timestamp?: string; payload?: Record<string, unknown> };
 		try {
 			entry = JSON.parse(line);
 		} catch {
@@ -216,6 +247,33 @@ async function processRolloutFile(
 		}
 
 		if (!sessionId) continue;
+
+		if (entry.type === "turn_context" && typeof entry.payload?.model === "string") {
+			await postHook(
+				serverUrl,
+				apiKey,
+				{
+					session_id: sessionId,
+					hook_event_name: "Telemetry",
+					model: entry.payload.model,
+					observed_at: entry.timestamp,
+				},
+				"/telemetry",
+			);
+		}
+		if (entry.type === "event_msg" && entry.payload?.type === "token_count") {
+			const telemetry = codexTelemetry(
+				entry.payload.info,
+				entry.timestamp || new Date().toISOString(),
+			);
+			if (telemetry)
+				await postHook(
+					serverUrl,
+					apiKey,
+					{ session_id: sessionId, hook_event_name: "Telemetry", telemetry },
+					"/telemetry",
+				);
+		}
 
 		if (entry.type === "response_item") {
 			const p = entry.payload ?? {};
@@ -301,9 +359,11 @@ export async function startCodexObserver(options: {
 		for (const file of files) {
 			try {
 				if (process.env.AGENTPULSE_HOOK_QUEUE_URL) {
-					const response = await fetch(process.env.AGENTPULSE_HOOK_QUEUE_URL, { signal: AbortSignal.timeout(3_000) });
+					const response = await fetch(process.env.AGENTPULSE_HOOK_QUEUE_URL, {
+						signal: AbortSignal.timeout(3_000),
+					});
 					if (!response.ok) throw new Error("hook queue diagnostics unavailable");
-					const diagnostics = await response.json() as { queue: { pending: number } };
+					const diagnostics = (await response.json()) as { queue: { pending: number } };
 					if (diagnostics.queue.pending > 200) return;
 				}
 				let callMap = callMapsByFile.get(file);
@@ -333,6 +393,10 @@ export async function startCodexObserver(options: {
 	setInterval(async () => {
 		if (scanning) return;
 		scanning = true;
-		try { await scan(); } finally { scanning = false; }
+		try {
+			await scan();
+		} finally {
+			scanning = false;
+		}
 	}, SCAN_INTERVAL_MS).unref();
 }

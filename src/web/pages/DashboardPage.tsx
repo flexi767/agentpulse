@@ -4,10 +4,11 @@ import { isArchivedSession, isVisibleSession } from "../../shared/session-state.
 import { FirstRunWelcome } from "../components/FirstRunWelcome.js";
 import { SessionActivityBadge } from "../components/SessionActivityBadge.js";
 import { SessionGrid } from "../components/SessionGrid.js";
+import { SessionUsage } from "../components/SessionUsage.js";
 import { StatCard } from "../components/StatCard.js";
 import { useSessions } from "../hooks/useSessions.js";
-import { cn, formatDuration, parseDate } from "../lib/utils.js";
 import { sessionHost } from "../lib/session-host.js";
+import { cn, formatDuration, parseDate } from "../lib/utils.js";
 import { useProjectsStore } from "../stores/projects-store.js";
 import { useUiPrefsStore } from "../stores/ui-prefs-store.js";
 
@@ -282,7 +283,10 @@ export function DashboardPage() {
 									>
 										<div className="flex items-center gap-2">
 											<span className="truncate text-sm font-medium">{label}</span>
-											<SessionActivityBadge working={session.isWorking} waiting={session.semanticStatus === "waiting"} />
+											<SessionActivityBadge
+												working={session.isWorking}
+												waiting={session.semanticStatus === "waiting"}
+											/>
 										</div>
 										<div className="mt-1 truncate text-[11px] text-muted-foreground">
 											{sessionHost(session)} · {session.cwd?.split("/").pop() || "No project"}
@@ -303,7 +307,11 @@ export function DashboardPage() {
 									</div>
 								</div>
 								<div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-									<div><span className="text-foreground">Host:</span> {sessionHost(selectedActiveSession)}</div>
+									<SessionUsage session={selectedActiveSession} compact />
+									<div>
+										<span className="text-foreground">Host:</span>{" "}
+										{sessionHost(selectedActiveSession)}
+									</div>
 									<div>
 										<span className="text-foreground">Status:</span> {selectedActiveSession.status}
 									</div>
