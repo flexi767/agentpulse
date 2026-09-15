@@ -90,7 +90,8 @@ export function CostOverview() {
 						</div>
 						<p className="text-xs text-muted-foreground mt-1">
 							{t.sessionName} · {t.host} · {t.toolCalls} reported tool calls ·{" "}
-							{costTotal(t.usage).complete ? "Priced" : "Partially priced"}
+							{"Estimated cost: "}{money(costTotal(t.usage).known)} ·{" "}
+							{costTotal(t.usage).complete ? "All reported usage priced" : `${costTotal(t.usage).unknownTokens.toLocaleString()} tokens unpriced`}
 						</p>
 						<p className="text-xs mt-1">{costDrivers(t.usage)}</p>
 					</div>
