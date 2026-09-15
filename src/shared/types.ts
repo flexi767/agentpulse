@@ -212,6 +212,7 @@ export type HookEventType = ClaudeCodeEvent | CodexEvent;
 
 // Raw hook event payload (union of fields from both agents)
 export interface HookEventPayload {
+	host_name?: string;
 	session_id: string;
 	hook_event_name: string;
 	cwd?: string;

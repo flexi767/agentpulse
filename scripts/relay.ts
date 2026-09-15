@@ -11,6 +11,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { hostname } from "node:os";
 
 const args = process.argv.slice(2);
 let remoteUrl = "";
@@ -326,7 +327,13 @@ function scheduleQueue(delayMs = 0) {
 
 async function enqueueHook(req: Request, url: URL) {
 	await ensureQueueDirs();
-	const body = await req.text();
+	let body = await req.text();
+	try {
+		const payload = JSON.parse(body);
+		if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+			body = JSON.stringify({ ...payload, host_name: process.env.AGENTPULSE_HOST_NAME || hostname() });
+		}
+	} catch {}
 	const item: HookQueueItem = {
 		id: crypto.randomUUID(),
 		pathname: url.pathname,

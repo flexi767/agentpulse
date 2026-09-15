@@ -7,6 +7,7 @@ import { SessionGrid } from "../components/SessionGrid.js";
 import { StatCard } from "../components/StatCard.js";
 import { useSessions } from "../hooks/useSessions.js";
 import { cn, formatDuration, parseDate } from "../lib/utils.js";
+import { sessionHost } from "../lib/session-host.js";
 import { useProjectsStore } from "../stores/projects-store.js";
 import { useUiPrefsStore } from "../stores/ui-prefs-store.js";
 
@@ -284,7 +285,7 @@ export function DashboardPage() {
 											<SessionActivityBadge working={session.isWorking} waiting={session.semanticStatus === "waiting"} />
 										</div>
 										<div className="mt-1 truncate text-[11px] text-muted-foreground">
-											{session.cwd?.split("/").pop() || "No project"}
+											{sessionHost(session)} · {session.cwd?.split("/").pop() || "No project"}
 										</div>
 									</button>
 								);
@@ -302,6 +303,7 @@ export function DashboardPage() {
 									</div>
 								</div>
 								<div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+									<div><span className="text-foreground">Host:</span> {sessionHost(selectedActiveSession)}</div>
 									<div>
 										<span className="text-foreground">Status:</span> {selectedActiveSession.status}
 									</div>

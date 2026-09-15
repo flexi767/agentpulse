@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 
@@ -79,6 +79,7 @@ type HookPayload = {
 };
 
 async function postHook(serverUrl: string, apiKey: string | null, payload: HookPayload) {
+	const hostedPayload = { ...payload, host_name: process.env.AGENTPULSE_HOST_NAME || hostname() };
 	if (process.env.AGENTPULSE_OBSERVER_AUTH_FILE) {
 		const authFile = join(homedir(), ".agentpulse", "hook-auth");
 		await new Promise<void>((resolve, reject) => {
@@ -87,7 +88,7 @@ async function postHook(serverUrl: string, apiKey: string | null, payload: HookP
 			child.stderr.resume();
 			child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`hook curl exit ${code}`)));
 			child.stdin.on("error", reject);
-			child.stdin.end(JSON.stringify(payload));
+			child.stdin.end(JSON.stringify(hostedPayload));
 		});
 		return;
 	}
@@ -102,7 +103,7 @@ async function postHook(serverUrl: string, apiKey: string | null, payload: HookP
 	const res = await fetch(`${serverUrl}/api/v1/hooks`, {
 		method: "POST",
 		headers,
-		body: JSON.stringify(payload),
+		body: JSON.stringify(hostedPayload),
 		signal: AbortSignal.timeout(15_000),
 	});
 	if (!res.ok) {

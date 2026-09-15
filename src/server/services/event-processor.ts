@@ -459,6 +459,9 @@ export async function processHookEvent(
 
 	if (payload.cwd) updates.cwd = payload.cwd;
 	if (payload.model) updates.model = payload.model;
+	if (typeof payload.host_name === "string" && payload.host_name.trim()) {
+		updates.metadata = { ...(existing[0]?.metadata ?? {}), hostName: payload.host_name.trim() };
+	}
 
 	// Handle session end events
 	if (eventType === "SessionEnd") {

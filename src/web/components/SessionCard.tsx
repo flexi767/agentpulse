@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { Session } from "../../shared/types.js";
 import { type SessionIntelligence, api } from "../lib/api.js";
 import { extractProjectName, formatDuration, getSessionMode, projectColor } from "../lib/utils.js";
+import { sessionHost } from "../lib/session-host.js";
 import { useLabsStore } from "../stores/labs-store.js";
 import { useProjectsStore } from "../stores/projects-store.js";
 import { useSessionStore } from "../stores/session-store.js";
@@ -376,6 +377,7 @@ export function SessionCard({ session, intelligence }: SessionCardProps) {
 
 			{/* Project + branch */}
 			<div className="mb-2">
+				<p className="text-xs font-mono text-muted-foreground mb-1">Host: {sessionHost(session)}</p>
 				<h3 className="text-sm font-semibold truncate text-foreground group-hover:text-primary transition-colors">
 					{projectName}
 				</h3>
