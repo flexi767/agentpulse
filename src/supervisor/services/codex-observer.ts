@@ -299,6 +299,12 @@ export async function startCodexObserver(options: {
 		const files = listRolloutFiles(BACKFILL_DAYS);
 		for (const file of files) {
 			try {
+				if (process.env.AGENTPULSE_HOOK_QUEUE_URL) {
+					const response = await fetch(process.env.AGENTPULSE_HOOK_QUEUE_URL, { signal: AbortSignal.timeout(3_000) });
+					if (!response.ok) throw new Error("hook queue diagnostics unavailable");
+					const diagnostics = await response.json() as { queue: { pending: number } };
+					if (diagnostics.queue.pending > 200) return;
+				}
 				let callMap = callMapsByFile.get(file);
 				if (!callMap) {
 					callMap = new Map<string, string>();
