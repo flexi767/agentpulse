@@ -51,7 +51,7 @@ export function DashboardPage() {
 			? visibleSessions.filter(isVisibleSession)
 			: filter === "archived"
 				? visibleSessions.filter(isArchivedSession)
-				: visibleSessions.filter((s) => s.status === filter);
+				: visibleSessions.filter((s) => isVisibleSession(s) && s.status === filter);
 
 	// Filter by search
 	if (search.trim()) {
@@ -68,8 +68,12 @@ export function DashboardPage() {
 	const activeSessions = useMemo(
 		() =>
 			visibleSessions
-				.filter((s) => s.status === "active")
-				.sort((a, b) => parseDate(b.lastActivityAt) - parseDate(a.lastActivityAt)),
+				.filter((s) => isVisibleSession(s) && s.status === "active")
+				.sort(
+					(a, b) =>
+						parseDate(b.startedAt) - parseDate(a.startedAt) ||
+						a.sessionId.localeCompare(b.sessionId),
+				),
 		[visibleSessions],
 	);
 	const workingCount = visibleSessions.filter((s) => s.isWorking).length;

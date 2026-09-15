@@ -7,19 +7,24 @@ export function useSessions() {
 	const { sessions, stats, setSessions, setStats, isLoading, setLoading } = useSessionStore();
 
 	useEffect(() => {
+		let cancelled = false;
+		let fetching = false;
 		async function fetchSessions() {
-			setLoading(true);
+			if (fetching) return;
+			fetching = true;
 			try {
 				const [sessionsRes, statsRes] = await Promise.all([
 					api.getSessions({ limit: 100 }),
 					api.getStats(),
 				]);
+				if (cancelled) return;
 				setSessions(sessionsRes.sessions as Session[]);
 				setStats(statsRes as DashboardStats);
 			} catch (err) {
 				console.error("[sessions] Failed to fetch:", err);
 			} finally {
-				setLoading(false);
+				fetching = false;
+				if (!cancelled) setLoading(false);
 			}
 		}
 
@@ -27,7 +32,10 @@ export function useSessions() {
 
 		// Refresh every 30 seconds as a fallback
 		const interval = setInterval(fetchSessions, 30_000);
-		return () => clearInterval(interval);
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
 	}, [setSessions, setStats, setLoading]);
 
 	return { sessions, stats, isLoading };

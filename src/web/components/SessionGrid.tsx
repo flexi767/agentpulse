@@ -43,7 +43,7 @@ function useSessionIntelligence(
 
 export function SessionGrid({ sessions, isLoading, filter }: SessionGridProps) {
 	const intelligence = useSessionIntelligence(sessions);
-	if (isLoading) {
+	if (isLoading && sessions.length === 0) {
 		return (
 			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
 				{Array.from({ length: 4 }).map((_, i) => (
@@ -96,7 +96,7 @@ export function SessionGrid({ sessions, isLoading, filter }: SessionGridProps) {
 		);
 	}
 
-	// Sort: pinned first, then active, then by last activity
+	// Keep cards in a stable order while live activity updates their contents.
 	const sorted = [...sessions].sort((a, b) => {
 		if (a.isPinned && !b.isPinned) return -1;
 		if (!a.isPinned && b.isPinned) return 1;
@@ -109,7 +109,9 @@ export function SessionGrid({ sessions, isLoading, filter }: SessionGridProps) {
 		};
 		const statusDiff = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
 		if (statusDiff !== 0) return statusDiff;
-		return parseDate(b.lastActivityAt) - parseDate(a.lastActivityAt);
+		return (
+			parseDate(b.startedAt) - parseDate(a.startedAt) || a.sessionId.localeCompare(b.sessionId)
+		);
 	});
 
 	// Group by project
