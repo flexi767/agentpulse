@@ -63,7 +63,7 @@ function listRolloutFiles(sinceDaysAgo: number): string[] {
 		const path = join(CODEX_SESSIONS_ROOT, entry);
 		if (Date.now() - statSync(path).mtimeMs < 86_400_000 && !result.includes(path)) result.push(path);
 	}
-	return result;
+	return result.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
 }
 
 type HookPayload = {
@@ -163,9 +163,13 @@ async function processRolloutFile(
 	const chunk = buf.toString("utf8");
 	const endsWithNewline = chunk.endsWith("\n");
 	const lines = chunk.split("\n");
-	const completeLines = endsWithNewline ? lines.filter((l) => l !== "") : lines.slice(0, -1);
+	const allCompleteLines = lines.slice(0, -1);
+	// Bound replay work so one long session cannot starve other live sessions.
+	const completeLines = allCompleteLines.slice(0, 100);
 	const incomplete = endsWithNewline ? "" : lines[lines.length - 1];
-	const consumedBytes = bytesToRead - Buffer.byteLength(incomplete, "utf8");
+	const consumedBytes = completeLines.length < allCompleteLines.length
+		? Buffer.byteLength(`${completeLines.join("\n")}\n`, "utf8")
+		: bytesToRead - Buffer.byteLength(incomplete, "utf8");
 	const newOffset = startOffset + consumedBytes;
 
 	let sessionId = stateEntry?.sessionId ?? "";
